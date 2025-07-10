@@ -1,0 +1,32 @@
+{
+  "name": "apie/typescript-client-builder",
+  "description": "Composer package of the apie library: typescript client builder",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Pieter Jordaan",
+      "email": "pieter_jordaan@hotmail.com"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Apie\\TypescriptClientBuilder\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Apie\\Tests\\TypescriptClientBuilder\\": "tests/"
+    }
+  },
+  "require": {
+    "php": ">=8.3",
+    "apie/core": "self.version"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.5.2",
+    "phpspec/prophecy-phpunit": "^2.2"
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
