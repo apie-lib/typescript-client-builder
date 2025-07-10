@@ -1,0 +1,19 @@
+{
+  "name": "typescript-client-builder",
+  "version": "1.0.0",
+  "description": "Typescript client builder code",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
