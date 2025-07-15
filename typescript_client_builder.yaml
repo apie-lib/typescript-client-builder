@@ -1,0 +1,5 @@
+services:
+
+  Apie\TypescriptClientBuilder\RouteDefinitions\CodeRouteDefinitionProvider:
+    tags: 
+      - name: apie.common.route_definition
