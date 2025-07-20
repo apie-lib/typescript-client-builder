@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES5",
+    "outDir": "dist/es5",
+    "downlevelIteration": true,
+    "importHelpers": true,
+    "noEmitHelpers": true
+  }
+}

@@ -1,5 +1,5 @@
 import { createBoundedContext } from "./build-script";
-import { FetchTransportLayer } from "./transport-layer";
+import { FetchTransportLayer, InMemoryTransportLayer } from "./transport-layer";
 function applyDefinition(context, definition) {
     switch (definition.type) {
         case 'createEntity':
@@ -12,6 +12,18 @@ function applyDefinition(context, definition) {
 }
 export function createForApi(apiUrl, definition) {
     const transportLayer = new FetchTransportLayer(apiUrl);
+    const result = {};
+    for (let [key, data] of Object.entries(definition)) {
+        const definition = createBoundedContext(key, transportLayer);
+        for (let methodDefinition of data) {
+            applyDefinition(definition, methodDefinition);
+        }
+        result[key] = definition.toBoundedContext();
+    }
+    return result;
+}
+export function createForTest(definition) {
+    const transportLayer = new InMemoryTransportLayer();
     const result = {};
     for (let [key, data] of Object.entries(definition)) {
         const definition = createBoundedContext(key, transportLayer);
