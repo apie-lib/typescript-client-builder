@@ -55,7 +55,7 @@ final class EntityListFactory
     {
         $result = [];
         // TODO use ApieContext builder?
-        $context = new ApieContext(['code-gen' => 1]);
+        $context = new ApieContext(['code-gen' => 1, ContextConstants::REST_API => true,]);
         foreach ($boundedContextHashmap as $boundedContext) {
             $todoList = [];
             foreach ($boundedContext->resources as $entityClass) {
