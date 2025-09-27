@@ -66,65 +66,9 @@ function createNamedFunction(functionName, functionBody) {
 }
 export function createBoundedContext(contextName, transportLayer) {
     const metadata = new WeakMap();
-    const entityMap = new Map();
-    function createProperty(entityName, propertyName, writableOnCreation, writableOnModification, readable) {
-        const constructor = entityMap.get(entityName);
-        if (!constructor) {
-            throw new Error(entityName + ' is not defined!');
-        }
-        Object.defineProperty(constructor.prototype, propertyName, {
-            enumerable: readable,
-            configurable: false,
-            writable: writableOnCreation || writableOnModification,
-            set: function (v) {
-                const state = metadata.get(this);
-                if (!state) {
-                    throw new Error('Unknown entity');
-                }
-                if (['Draft', 'Creating'].includes(state.state)) {
-                    if (!state.creationData) {
-                        state.creationData = {};
-                    }
-                    state.creationData[propertyName] = v;
-                }
-                else {
-                    if (!state.modificationData) {
-                        state.modificationData = {};
-                    }
-                    state.modificationData[propertyName] = v;
-                }
-                state.state = toModifiedState(state.state);
-                metadata.set(this, state);
-            },
-            get: readable
-                ? function () {
-                    const state = metadata.get(this);
-                    if (!state) {
-                        throw new Error('Unknown entity');
-                    }
-                    if (['Draft', 'Creating'].includes(state.state)) {
-                        return state.creationData ? state.creationData[propertyName] : undefined;
-                    }
-                    const mData = state.modificationData ? state.modificationData[propertyName] : undefined;
-                    if (mData === undefined) {
-                        return state.retrievalData ? state.retrievalData[propertyName] : undefined;
-                    }
-                    return mData;
-                } : function () {
-                throw new Error(propertyName + ' is not readable');
-            }
-        });
-    }
-    function createEntity(entityName) {
-        if (entityMap.has(entityName)) {
-            throw new Error(entityName + ' is already defined!');
-        }
-        const constructor = createNamedFunction(entityName, function (creationData) {
-            metadata.set(this, { state: 'Draft', creationData: creationData !== null && creationData !== void 0 ? creationData : {}, modificationData: null, retrievalData: null });
-        });
-        entityMap.set(entityName, constructor);
-        return constructor;
-    }
+    const retrievalData = new Map();
+    const entityNameMap = new Map();
+    const entityFormMap = new Map();
     function toBoundedContext() {
         const context = {
             name: contextName,
@@ -143,10 +87,10 @@ export function createBoundedContext(contextName, transportLayer) {
                     state.state = isNew ? 'Creating' : 'Updating';
                     metadata.set(entity, state);
                     const rawData = isNew
-                        ? yield transportLayer.create(contextName, entity.constructor.name, (_a = state.creationData) !== null && _a !== void 0 ? _a : {})
-                        : yield transportLayer.modify(contextName, entity.constructor.name, entity.id, (_b = state.modificationData) !== null && _b !== void 0 ? _b : {});
+                        ? yield transportLayer.create(contextName, entity.constructor.name, (_a = state.data) !== null && _a !== void 0 ? _a : {})
+                        : yield transportLayer.modify(contextName, entity.constructor.name, entity.id, (_b = state.data) !== null && _b !== void 0 ? _b : {});
                     state.state = toPersistedState(state.state);
-                    state.retrievalData = rawData;
+                    state.data = rawData;
                     metadata.set(entity, state);
                     return entity;
                 });
@@ -169,10 +113,96 @@ export function createBoundedContext(contextName, transportLayer) {
                 });
             }
         };
-        for (let [entityName, entity] of entityMap.entries()) {
+        for (let [entityName, entity] of entityNameMap.entries()) {
             context.entities[entityName] = entity;
         }
         return context;
+    }
+    function createEntity(entityName) {
+        if (entityNameMap.has(entityName)) {
+            throw new Error(entityName + ' is already defined!');
+        }
+        const constructor = createNamedFunction(entityName, function (creationData) {
+            metadata.set(this, { id: null, state: 'Draft', data: creationData !== null && creationData !== void 0 ? creationData : {} });
+        });
+        const formConstructor = createNamedFunction(entityName, function (id) {
+            var _a, _b;
+            metadata.set(this, { id, state: 'Updating', data: (_b = (_a = retrievalData.get(entityName)) === null || _a === void 0 ? void 0 : _a.get(id)) !== null && _b !== void 0 ? _b : {} });
+        });
+        entityNameMap.set(entityName, constructor);
+        entityFormMap.set(entityName, formConstructor);
+        constructor.prototype.createForm = function () {
+            return new formConstructor(this.id);
+        };
+        return constructor;
+    }
+    function createProperty(entityName, propertyName, writableOnCreation, writableOnModification, readable) {
+        const constructor = entityNameMap.get(entityName);
+        if (!constructor) {
+            throw new Error(entityName + ' is not defined!');
+        }
+        const formConstructor = entityFormMap.get(entityName);
+        if (!formConstructor) {
+            throw new Error(entityName + ' is not defined!');
+        }
+        if (readable || writableOnCreation) {
+            Object.defineProperty(constructor.prototype, propertyName, {
+                enumerable: readable,
+                configurable: false,
+                get: readable ? function () {
+                    var _a, _b;
+                    const state = metadata.get(this);
+                    if (state && ['Draft', 'Creating'].includes(state.state)) {
+                        return state.data ? state.data[propertyName] : undefined;
+                    }
+                    return (_b = (_a = retrievalData.get(entityName)) === null || _a === void 0 ? void 0 : _a.get(this.id)) === null || _b === void 0 ? void 0 : _b[propertyName];
+                } : function () {
+                    throw new Error(propertyName + ' is not readable');
+                },
+                set: writableOnCreation
+                    ? function (v) {
+                        const state = metadata.get(this);
+                        if (!state) {
+                            throw new Error('Can not set property ' + propertyName + ' on already persisted entity. Use createForm() to modify an existing entity.');
+                        }
+                        if (['Draft', 'Creating'].includes(state.state)) {
+                            if (!state.data) {
+                                state.data = {};
+                            }
+                            state.data[propertyName] = v;
+                        }
+                        state.state = toModifiedState(state.state);
+                        metadata.set(this, state);
+                    }
+                    : function () {
+                        throw new Error(propertyName + ' is not writable on creation');
+                    }
+            });
+        }
+        Object.defineProperty(formConstructor.prototype, propertyName, {
+            enumerable: readable,
+            configurable: false,
+            writable: writableOnCreation || writableOnModification,
+            set: function (v) {
+                const state = metadata.get(this);
+                if (!state) {
+                    throw new Error('Unknown entity form');
+                }
+                if (!state.data) {
+                    state.data = {};
+                }
+                state.data[propertyName] = v;
+                state.state = toModifiedState(state.state);
+                metadata.set(this, state);
+            },
+            get: function () {
+                const state = metadata.get(this);
+                if (!state) {
+                    throw new Error('Unknown entity form');
+                }
+                return state.data ? state.data[propertyName] : undefined;
+            }
+        });
     }
     return {
         name: contextName,
