@@ -11,19 +11,21 @@ class CodeRouteDefinitionProvider implements GlobalRouteDefinitionProviderInterf
     public function getGlobalRoutes(): ActionHashmap
     {
         $routes = [];
+        $definition = new Es6ModuleRoute();
+        $routes[$definition->getOperationId()] = $definition;
         $definition = new StaticContentRoute(
             __DIR__ . '/../../resources',
-            '/contents/ts'
+            '/js/contents/ts'
         );
         $routes[$definition->getOperationId()] = $definition;
         $definition = new StaticContentRoute(
             __DIR__ . '/../../dist/es6',
-            '/contents/es6'
+            '/js/contents/es6'
         );
         $routes[$definition->getOperationId()] = $definition;
         $definition = new StaticContentRoute(
             __DIR__ . '/../../dist/es5',
-            '/contents/es5'
+            '/js/contents/es5'
         );
         $routes[$definition->getOperationId()] = $definition;
         return new ActionHashmap($routes);
@@ -34,17 +36,17 @@ class CodeRouteDefinitionProvider implements GlobalRouteDefinitionProviderInterf
         $routes = [];
         $definition = new StaticContentRoute(
             __DIR__ . '/../../resources',
-            '/contents/ts'
+            '/js/contents/ts'
         );
         $routes[$definition->getOperationId()] = $definition;
         $definition = new StaticContentRoute(
             __DIR__ . '/../../dist',
-            '/contents/es6'
+            '/js/contents/es6'
         );
         $routes[$definition->getOperationId()] = $definition;
         $definition = new StaticContentRoute(
             __DIR__ . '/../../dist/es5',
-            '/contents/es5'
+            '/js/contents/es5'
         );
         $routes[$definition->getOperationId()] = $definition;
         return new ActionHashmap($routes);

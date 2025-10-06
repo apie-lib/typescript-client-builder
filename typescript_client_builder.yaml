@@ -3,3 +3,17 @@ services:
   Apie\TypescriptClientBuilder\RouteDefinitions\CodeRouteDefinitionProvider:
     tags: 
       - name: apie.common.route_definition
+
+  Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory:
+
+  Apie\TypescriptClientBuilder\CodeGenerators\Es6CodeGenerator:
+    arguments:
+      - '@Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory'
+
+  Apie\TypescriptClientBuilder\Controllers\Es6CodeController:
+    arguments:
+      - '@Apie\TypescriptClientBuilder\CodeGenerators\Es6CodeGenerator'
+      - '@Apie\Core\BoundedContext\BoundedContextHashmap'
+      - '%apie.rest_api.base_url%'
+    tags: ['controller.service_arguments']
+

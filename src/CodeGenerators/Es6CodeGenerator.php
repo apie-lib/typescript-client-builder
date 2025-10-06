@@ -12,8 +12,8 @@ class Es6CodeGenerator
 
     public function create(BoundedContextHashmap $boundedContextHashmap, string $apiEndpoint): string
     {
-        return "import { createForApi } from './index';
-const apiUrl = " . json_encode($apiEndpoint) . ";
+        return "import { createForApi } from './contents/es6/index';
+const apiUrl = " . json_encode($apiEndpoint, JSON_UNESCAPED_SLASHES) . ";
 const resourceDefinition = " . json_encode($this->entityListFactory->createTodolistPerBoundedContext($boundedContextHashmap), JSON_PRETTY_PRINT) . ";
 export const ApieLayer = createForApi(apiUrl, resourceDefinition);
 ";
