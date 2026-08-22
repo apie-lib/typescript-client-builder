@@ -23,10 +23,8 @@ class StaticContentController
         }
         $stream = Stream::create($handle);
         $mimeType = mime_content_type($filePath);
-        // issue in PHP 8.3
-        if ($mimeType === 'text/x-java') {
-            $mimeType = 'application/javascript';
-        } elseif ($mimeType === false) {
+        
+        if ($mimeType === false) {
             $mimeType = 'application/octet-stream';
         }
         return new Response(
