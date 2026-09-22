@@ -34,6 +34,14 @@ class TypescriptClientBuilderServiceProvider extends ServiceProvider
         );
         $this->app->tag([\Apie\TypescriptClientBuilder\RouteDefinitions\CodeRouteDefinitionProvider::class], 'apie.common.route_definition');
         $this->registerSingleton(
+            \Apie\TypescriptClientBuilder\CodeGenerators\FileFactory::class,
+            function ($app) {
+                return new \Apie\TypescriptClientBuilder\CodeGenerators\FileFactory(
+                    $app->make(\Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory::class)
+                );
+            }
+        );
+        $this->registerSingleton(
             \Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory::class,
             function ($app) {
                 return new \Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory(
@@ -45,7 +53,7 @@ class TypescriptClientBuilderServiceProvider extends ServiceProvider
             \Apie\TypescriptClientBuilder\CodeGenerators\Es6CodeGenerator::class,
             function ($app) {
                 return new \Apie\TypescriptClientBuilder\CodeGenerators\Es6CodeGenerator(
-                    $app->make(\Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory::class)
+                    $app->make(\Apie\TypescriptClientBuilder\CodeGenerators\FileFactory::class)
                 );
             }
         );

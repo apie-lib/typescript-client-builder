@@ -4,6 +4,7 @@ namespace Apie\Tests\TypescriptClientBuilder\CodeGenerators;
 use Apie\Fixtures\BoundedContextFactory;
 use Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory;
 use Apie\TypescriptClientBuilder\CodeGenerators\Es6CodeGenerator;
+use Apie\TypescriptClientBuilder\CodeGenerators\FileFactory;
 use PHPUnit\Framework\Attributes\Test;
 
 class Es6CodeGeneratorTest extends \PHPUnit\Framework\TestCase
@@ -11,7 +12,7 @@ class Es6CodeGeneratorTest extends \PHPUnit\Framework\TestCase
     #[Test]
     public function it_can_generate_es6_code()
     {
-        $testItem = new Es6CodeGenerator(new EntityListFactory);
+        $testItem = new Es6CodeGenerator(new FileFactory(new EntityListFactory));
         $actual = $testItem->create(
             BoundedContextFactory::createHashmapWithMultipleContexts(),
             'https://apie-lib.blogspot.com/'

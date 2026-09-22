@@ -4,11 +4,15 @@ services:
     tags: 
       - name: apie.common.route_definition
 
+  Apie\TypescriptClientBuilder\CodeGenerators\FileFactory:
+    arguments:
+      - '@Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory'
+
   Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory:
 
   Apie\TypescriptClientBuilder\CodeGenerators\Es6CodeGenerator:
     arguments:
-      - '@Apie\TypescriptClientBuilder\CodeGenerators\EntityListFactory'
+      - '@Apie\TypescriptClientBuilder\CodeGenerators\FileFactory'
 
   Apie\TypescriptClientBuilder\Controllers\Es6CodeController:
     arguments:

@@ -1,4 +1,4 @@
-import { createForApi } from './contents/es6/index';
+import { createForApi } from "./contents/es6/index";
 const apiUrl = "https://apie-lib.blogspot.com/";
 const resourceDefinition = {
     "default": [
