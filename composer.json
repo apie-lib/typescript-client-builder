@@ -34,6 +34,12 @@
     "phpunit/phpunit": "^11.5.2",
     "phpspec/prophecy-phpunit": "^2.5"
   },
+  "extra": {
+    "apie-objects": [
+    "Apie\\TypescriptClientBuilder\\Dto\\TypeDeclarationResult",
+    "Apie\\TypescriptClientBuilder\\Dto\\BoundedContextDeclaration"
+]
+  },
   "minimum-stability": "dev",
   "prefer-stable": true
 }

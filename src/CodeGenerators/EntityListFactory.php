@@ -9,7 +9,7 @@ use Apie\Core\Metadata\MetadataFactory;
 final class EntityListFactory
 {
     /**
-     * @param ReflectionClass<EntityInterface> $entityClass
+     * @param \ReflectionClass<EntityInterface> $entityClass
      * @return array<int, array<string, mixed>>
      */
     public function createTodoList(\ReflectionClass $entityClass, ApieContext $context): array

@@ -134,4 +134,5 @@ const resourceDefinition = {
         }
     ]
 };
-export const ApieLayer = createForApi(apiUrl, resourceDefinition);
+const ApieLayer = createForApi(apiUrl, resourceDefinition);
+export { ApieLayer }
