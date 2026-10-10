@@ -20,6 +20,13 @@ var __asyncGenerator = (this && this.__asyncGenerator) || function (thisArg, _ar
     function reject(value) { resume("throw", value); }
     function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
 };
+var __asyncValues = (this && this.__asyncValues) || function (o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+};
 export class InMemoryTransportLayer {
     constructor() {
         this.context = new Map();
@@ -209,5 +216,300 @@ export class FetchTransportLayer {
                 url = data.next ? `${this.baseUrl}${data.next}` : '';
             }
         });
+    }
+}
+class MemoryStorage {
+    constructor() {
+        this.data = new Map();
+    }
+    getItem(key) { var _a; return (_a = this.data.get(key)) !== null && _a !== void 0 ? _a : null; }
+    setItem(key, value) { this.data.set(key, value); }
+    removeItem(key) { this.data.delete(key); }
+}
+/**
+ * Wraps another transport layer. While the browser is offline (or the inner transport cannot be reached)
+ * changes are stored in a persistent queue so they survive a page refresh and are sent
+ * to the inner transport layer once the connection is back.
+ */
+export class OfflineTransportLayer {
+    constructor(inner, options = {}) {
+        var _a, _b, _c, _d;
+        this.inner = inner;
+        this.state = { pending: [], failed: [], idMap: {} };
+        this.syncing = null;
+        this.onOnline = () => { void this.sync(); };
+        this.storage = (_a = options.storage) !== null && _a !== void 0 ? _a : (typeof localStorage !== 'undefined' ? localStorage : new MemoryStorage());
+        this.storageKey = (_b = options.storageKey) !== null && _b !== void 0 ? _b : 'apie-offline-queue';
+        this.isOnlineFn = (_c = options.isOnline) !== null && _c !== void 0 ? _c : (() => typeof navigator === 'undefined' || navigator.onLine !== false);
+        this.load();
+        if ((_d = options.autoSync) !== null && _d !== void 0 ? _d : true) {
+            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+                window.addEventListener('online', this.onOnline);
+            }
+            if (this.isOnlineFn() && this.state.pending.length > 0) {
+                void this.sync();
+            }
+        }
+    }
+    /** Stops listening for the browser 'online' event. */
+    dispose() {
+        if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+            window.removeEventListener('online', this.onOnline);
+        }
+    }
+    /** Number of operations waiting to be sent. */
+    pendingCount() {
+        return this.state.pending.length;
+    }
+    /** Operations that were rejected by the server when synchronizing. */
+    failedOperations() {
+        return structuredClone(this.state.failed);
+    }
+    clearFailedOperations() {
+        this.state.failed = [];
+        this.save();
+    }
+    create(contextName, resourceName, rawData) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.canTryOnline()) {
+                try {
+                    return yield this.inner.create(contextName, resourceName, rawData);
+                }
+                catch (error) {
+                    this.rethrowUnlessNetworkError(error);
+                }
+            }
+            const hasId = rawData.id !== undefined && rawData.id !== null;
+            const id = hasId ? rawData.id : `offline-${this.uuid()}`;
+            const data = Object.assign(Object.assign({}, structuredClone(rawData)), { id });
+            this.state.pending.push({ type: 'create', contextName, resourceName, id, temporary: !hasId, data });
+            this.save();
+            return structuredClone(data);
+        });
+    }
+    modify(contextName, resourceName, id, rawData) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const pendingCreate = this.findPendingCreate(contextName, resourceName, id);
+            if (pendingCreate) {
+                Object.assign(pendingCreate.data, structuredClone(rawData), { id: pendingCreate.id });
+                this.save();
+                return structuredClone(pendingCreate.data);
+            }
+            if (this.canTryOnline() && !this.hasPendingFor(contextName, resourceName, id)) {
+                try {
+                    return yield this.inner.modify(contextName, resourceName, this.resolveId(contextName, resourceName, id), rawData);
+                }
+                catch (error) {
+                    this.rethrowUnlessNetworkError(error);
+                }
+            }
+            this.state.pending.push({ type: 'modify', contextName, resourceName, id, data: structuredClone(rawData) });
+            this.save();
+            return Object.assign(Object.assign({}, structuredClone(rawData)), { id });
+        });
+    }
+    remove(contextName, resourceName, id) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const index = this.state.pending.findIndex((op) => op.type === 'create' && this.sameResource(op, contextName, resourceName) && op.id === id);
+            if (index >= 0) {
+                // Never reached the server, so just forget about it (including queued changes to it).
+                this.state.pending = this.state.pending.filter((op) => !(this.sameResource(op, contextName, resourceName) && op.id === id));
+                this.save();
+                return;
+            }
+            if (this.canTryOnline() && !this.hasPendingFor(contextName, resourceName, id)) {
+                try {
+                    yield this.inner.remove(contextName, resourceName, this.resolveId(contextName, resourceName, id));
+                    return;
+                }
+                catch (error) {
+                    this.rethrowUnlessNetworkError(error);
+                }
+            }
+            this.state.pending = this.state.pending.filter((op) => !(op.type === 'modify' && this.sameResource(op, contextName, resourceName) && op.id === id));
+            this.state.pending.push({ type: 'remove', contextName, resourceName, id });
+            this.save();
+        });
+    }
+    get(contextName, resourceName, id) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const pendingCreate = this.findPendingCreate(contextName, resourceName, id);
+            if (pendingCreate) {
+                return structuredClone(pendingCreate.data);
+            }
+            if (this.isRemoved(contextName, resourceName, id)) {
+                throw new Error(`Resource with id ${id} does not exist`);
+            }
+            const item = yield this.inner.get(contextName, resourceName, this.resolveId(contextName, resourceName, id));
+            return this.applyModifications(contextName, resourceName, id, item);
+        });
+    }
+    list(contextName, resourceName, options) {
+        return __asyncGenerator(this, arguments, function* list_3() {
+            var _a, e_1, _b, _c;
+            var _d, _e;
+            // Pending creates are appended after the stored items, so offset/limit are applied to the combined list.
+            const offset = (_d = options === null || options === void 0 ? void 0 : options.offset) !== null && _d !== void 0 ? _d : 0;
+            const limit = (_e = options === null || options === void 0 ? void 0 : options.limit) !== null && _e !== void 0 ? _e : Infinity;
+            let index = 0;
+            let yielded = 0;
+            const emit = (item) => {
+                const current = index++;
+                return current >= offset && yielded < limit && ++yielded > 0;
+            };
+            if (this.canTryOnline()) {
+                try {
+                    try {
+                        for (var _f = true, _g = __asyncValues(this.inner.list(contextName, resourceName)), _h; _h = yield __await(_g.next()), _a = _h.done, !_a; _f = true) {
+                            _c = _h.value;
+                            _f = false;
+                            const item = _c;
+                            const id = item.id;
+                            if (id !== undefined && this.isRemoved(contextName, resourceName, id)) {
+                                continue;
+                            }
+                            if (emit(item)) {
+                                yield yield __await(id === undefined ? item : this.applyModifications(contextName, resourceName, id, item));
+                            }
+                        }
+                    }
+                    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                    finally {
+                        try {
+                            if (!_f && !_a && (_b = _g.return)) yield __await(_b.call(_g));
+                        }
+                        finally { if (e_1) throw e_1.error; }
+                    }
+                }
+                catch (error) {
+                    this.rethrowUnlessNetworkError(error);
+                }
+            }
+            for (const op of this.state.pending) {
+                if (op.type === 'create' && this.sameResource(op, contextName, resourceName)) {
+                    if (emit(op.data)) {
+                        yield yield __await(structuredClone(op.data));
+                    }
+                }
+            }
+        });
+    }
+    /**
+     * Sends all queued operations to the inner transport layer, in order.
+     * Stops when the connection is lost; operations rejected by the server are moved to failedOperations().
+     */
+    sync() {
+        if (!this.syncing) {
+            this.syncing = this.doSync().finally(() => { this.syncing = null; });
+        }
+        return this.syncing;
+    }
+    doSync() {
+        return __awaiter(this, void 0, void 0, function* () {
+            while (this.state.pending.length > 0 && this.isOnlineFn()) {
+                const op = this.state.pending[0];
+                try {
+                    yield this.send(op);
+                }
+                catch (error) {
+                    if (this.isNetworkError(error)) {
+                        return;
+                    }
+                    this.state.failed.push({ operation: op, error: error instanceof Error ? error.message : String(error) });
+                }
+                this.state.pending.shift();
+                this.save();
+            }
+        });
+    }
+    send(op) {
+        return __awaiter(this, void 0, void 0, function* () {
+            switch (op.type) {
+                case 'create': {
+                    const data = Object.assign({}, op.data);
+                    if (op.temporary) {
+                        delete data.id;
+                    }
+                    const result = yield this.inner.create(op.contextName, op.resourceName, data);
+                    if (op.temporary && (result === null || result === void 0 ? void 0 : result.id) !== undefined && result.id !== null) {
+                        this.state.idMap[this.key(op.contextName, op.resourceName, op.id)] = result.id;
+                    }
+                    break;
+                }
+                case 'modify':
+                    yield this.inner.modify(op.contextName, op.resourceName, this.resolveId(op.contextName, op.resourceName, op.id), op.data);
+                    break;
+                case 'remove':
+                    yield this.inner.remove(op.contextName, op.resourceName, this.resolveId(op.contextName, op.resourceName, op.id));
+                    break;
+            }
+        });
+    }
+    canTryOnline() {
+        return this.isOnlineFn();
+    }
+    rethrowUnlessNetworkError(error) {
+        if (!this.isNetworkError(error)) {
+            throw error;
+        }
+    }
+    isNetworkError(error) {
+        return error instanceof TypeError || !this.isOnlineFn();
+    }
+    sameResource(op, contextName, resourceName) {
+        return op.contextName === contextName && op.resourceName === resourceName;
+    }
+    key(contextName, resourceName, id) {
+        return JSON.stringify([contextName, resourceName, id]);
+    }
+    resolveId(contextName, resourceName, id) {
+        var _a;
+        return (_a = this.state.idMap[this.key(contextName, resourceName, id)]) !== null && _a !== void 0 ? _a : id;
+    }
+    findPendingCreate(contextName, resourceName, id) {
+        return this.state.pending.find((op) => op.type === 'create' && this.sameResource(op, contextName, resourceName) && op.id === id);
+    }
+    hasPendingFor(contextName, resourceName, id) {
+        return this.state.pending.some((op) => this.sameResource(op, contextName, resourceName) && op.id === id);
+    }
+    isRemoved(contextName, resourceName, id) {
+        return this.state.pending.some((op) => op.type === 'remove' && this.sameResource(op, contextName, resourceName) && op.id === id);
+    }
+    applyModifications(contextName, resourceName, id, item) {
+        for (const op of this.state.pending) {
+            if (op.type === 'modify' && this.sameResource(op, contextName, resourceName) && op.id === id) {
+                item = Object.assign(Object.assign({}, item), structuredClone(op.data));
+            }
+        }
+        return item;
+    }
+    uuid() {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+        return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    }
+    load() {
+        try {
+            const raw = this.storage.getItem(this.storageKey);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                this.state = {
+                    pending: Array.isArray(parsed.pending) ? parsed.pending : [],
+                    failed: Array.isArray(parsed.failed) ? parsed.failed : [],
+                    idMap: parsed.idMap && typeof parsed.idMap === 'object' ? parsed.idMap : {},
+                };
+            }
+        }
+        catch (_a) {
+            this.state = { pending: [], failed: [], idMap: {} };
+        }
+    }
+    save() {
+        if (this.state.pending.length === 0 && this.state.failed.length === 0 && Object.keys(this.state.idMap).length === 0) {
+            this.storage.removeItem(this.storageKey);
+            return;
+        }
+        this.storage.setItem(this.storageKey, JSON.stringify(this.state));
     }
 }

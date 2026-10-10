@@ -69,6 +69,12 @@ export function createBoundedContext(contextName, transportLayer) {
     const retrievalData = new Map();
     const entityNameMap = new Map();
     const entityFormMap = new Map();
+    function remember(entityName, rawData) {
+        if (!retrievalData.has(entityName)) {
+            retrievalData.set(entityName, new Map());
+        }
+        retrievalData.get(entityName).set(rawData.id, structuredClone(rawData));
+    }
     function toBoundedContext() {
         const context = {
             name: contextName,
@@ -91,7 +97,29 @@ export function createBoundedContext(contextName, transportLayer) {
                         : yield transportLayer.modify(contextName, entity.constructor.name, entity.id, (_b = state.data) !== null && _b !== void 0 ? _b : {});
                     state.state = toPersistedState(state.state);
                     state.data = rawData;
+                    if (rawData && rawData.id !== undefined && rawData.id !== null) {
+                        state.id = rawData.id;
+                        remember(entity.constructor.name, rawData);
+                    }
                     metadata.set(entity, state);
+                    return entity;
+                });
+            },
+            find: function (entityName, id) {
+                return __awaiter(this, void 0, void 0, function* () {
+                    var _a;
+                    const constructor = entityNameMap.get(entityName);
+                    if (!constructor) {
+                        throw new Error(entityName + ' is not defined!');
+                    }
+                    const rawData = yield transportLayer.get(contextName, entityName, id);
+                    const entity = new constructor(null);
+                    const state = metadata.get(entity);
+                    state.id = (_a = rawData === null || rawData === void 0 ? void 0 : rawData.id) !== null && _a !== void 0 ? _a : id;
+                    state.state = 'Persisted';
+                    state.data = rawData;
+                    metadata.set(entity, state);
+                    remember(entityName, Object.assign(Object.assign({}, rawData), { id: state.id }));
                     return entity;
                 });
             },
@@ -127,10 +155,26 @@ export function createBoundedContext(contextName, transportLayer) {
         });
         const formConstructor = createNamedFunction(entityName, function (id) {
             var _a, _b;
-            metadata.set(this, { id, state: 'Updating', data: (_b = (_a = retrievalData.get(entityName)) === null || _a === void 0 ? void 0 : _a.get(id)) !== null && _b !== void 0 ? _b : {} });
+            metadata.set(this, { id, state: 'Updating', data: structuredClone((_b = (_a = retrievalData.get(entityName)) === null || _a === void 0 ? void 0 : _a.get(id)) !== null && _b !== void 0 ? _b : {}) });
         });
         entityNameMap.set(entityName, constructor);
         entityFormMap.set(entityName, formConstructor);
+        Object.defineProperty(constructor.prototype, 'id', {
+            enumerable: false,
+            configurable: true,
+            get: function () {
+                var _a, _b;
+                return (_b = (_a = metadata.get(this)) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : null;
+            }
+        });
+        Object.defineProperty(formConstructor.prototype, 'id', {
+            enumerable: false,
+            configurable: true,
+            get: function () {
+                var _a, _b;
+                return (_b = (_a = metadata.get(this)) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : null;
+            }
+        });
         constructor.prototype.createForm = function () {
             return new formConstructor(this.id);
         };
@@ -155,7 +199,8 @@ export function createBoundedContext(contextName, transportLayer) {
                     if (state && ['Draft', 'Creating'].includes(state.state)) {
                         return state.data ? state.data[propertyName] : undefined;
                     }
-                    return (_b = (_a = retrievalData.get(entityName)) === null || _a === void 0 ? void 0 : _a.get(this.id)) === null || _b === void 0 ? void 0 : _b[propertyName];
+                    const id = state === null || state === void 0 ? void 0 : state.id;
+                    return id === null || id === undefined ? undefined : (_b = (_a = retrievalData.get(entityName)) === null || _a === void 0 ? void 0 : _a.get(id)) === null || _b === void 0 ? void 0 : _b[propertyName];
                 } : function () {
                     throw new Error(propertyName + ' is not readable');
                 },
@@ -182,7 +227,6 @@ export function createBoundedContext(contextName, transportLayer) {
         Object.defineProperty(formConstructor.prototype, propertyName, {
             enumerable: readable,
             configurable: false,
-            writable: writableOnCreation || writableOnModification,
             set: function (v) {
                 const state = metadata.get(this);
                 if (!state) {

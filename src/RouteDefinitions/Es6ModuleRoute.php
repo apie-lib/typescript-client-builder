@@ -15,7 +15,7 @@ class Es6ModuleRoute implements HasRouteDefinition
     }
     public function getUrl(): UrlRouteDefinition
     {
-        return new UrlRouteDefinition('js/Apie.es6.js');
+        return new UrlRouteDefinition('/js/contents/es6/Apie.js');
     }
     /**
      * @return class-string<object>

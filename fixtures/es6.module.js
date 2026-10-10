@@ -1,4 +1,4 @@
-import { createForApi } from "./contents/es6/index";
+import { createForApi } from "./index";
 const apiUrl = "https://apie-lib.blogspot.com/";
 const resourceDefinition = {
     "default": [
@@ -135,4 +135,4 @@ const resourceDefinition = {
     ]
 };
 const ApieLayer = createForApi(apiUrl, resourceDefinition);
-export { ApieLayer }
+export { ApieLayer, apiUrl, resourceDefinition }

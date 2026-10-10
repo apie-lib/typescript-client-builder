@@ -12,18 +12,22 @@ import { TransportLayer } from "./transport-layer";
  * - Deleting: object is being deleted
  * - Deleted: object is deleted
  */
-type EntityState = 'Draft'|'Creating'|'Creating+'|'Persisted'|'Pending'|'Updating+'|'Updating'|'Unverified'|'Deleting'|'Deleted';
-interface Entity {
+export type EntityState = 'Draft'|'Creating'|'Creating+'|'Persisted'|'Pending'|'Updating+'|'Updating'|'Unverified'|'Deleting'|'Deleted';
+export interface Entity {
     get id(): string|number;
+    [propertyName: string]: any;
+    createForm(): EntityForm;
 }
-interface EntityForm {
+export interface EntityForm {
+    readonly id: string|number;
+    [propertyName: string]: any;
 }
 
-type EntityConstructor = {
+export type EntityConstructor = {
   new (initialData: Record<string|number, any>|null): Entity;
 };
-type EntityFormConstructor = {
-  new (id: string|number): Entity;
+export type EntityFormConstructor = {
+    new (id: string|number): EntityForm;
 };
 
 interface BaseBoundedContext {
@@ -32,8 +36,9 @@ interface BaseBoundedContext {
 
 export interface BoundedContext extends BaseBoundedContext {
     entities: Record<string, EntityConstructor>;
-    persist: (entity: Entity) => Promise<Entity>;
+    persist: (entity: Entity | EntityForm) => Promise<Entity | EntityForm>;
     delete: (entity: Entity) => Promise<Entity>;
+    find: (entityName: string, id: string|number) => Promise<Entity>;
 }
 
 export interface BoundedContextDefinition extends BaseBoundedContext {
@@ -113,11 +118,18 @@ export function createBoundedContext(contextName: string, transportLayer: Transp
     const entityNameMap: Map<string, EntityConstructor> = new Map();
     const entityFormMap: Map<string, EntityFormConstructor> = new Map();
 
+    function remember(entityName: string, rawData: Record<string, any>): void {
+        if (!retrievalData.has(entityName)) {
+            retrievalData.set(entityName, new Map());
+        }
+        retrievalData.get(entityName)!.set(rawData.id, structuredClone(rawData));
+    }
+
     function toBoundedContext(): BoundedContext {
         const context: BoundedContext = {
             name: contextName,
             entities: {},
-            persist: async function (entity: Entity): Promise<Entity> {
+            persist: async function (entity: Entity | EntityForm): Promise<Entity | EntityForm> {
                 const state = metadata.get(entity);
                 if (!state) {
                     throw new Error('Unknown entity');
@@ -133,8 +145,28 @@ export function createBoundedContext(contextName: string, transportLayer: Transp
                     : await transportLayer.modify(contextName, entity.constructor.name, entity.id, state.data ?? {});
                 state.state = toPersistedState(state.state);
                 state.data = rawData;
+                if (rawData && rawData.id !== undefined && rawData.id !== null) {
+                    state.id = rawData.id;
+                    remember(entity.constructor.name, rawData);
+                }
                 metadata.set(entity, state);
         
+                return entity;
+            },
+            find: async function (entityName: string, id: string|number): Promise<Entity> {
+                const constructor = entityNameMap.get(entityName);
+                if (!constructor) {
+                    throw new Error(entityName + ' is not defined!');
+                }
+                const rawData = await transportLayer.get(contextName, entityName, id);
+                const entity = new constructor(null);
+                const state = metadata.get(entity)!;
+                state.id = rawData?.id ?? id;
+                state.state = 'Persisted';
+                state.data = rawData;
+                metadata.set(entity, state);
+                remember(entityName, { ...rawData, id: state.id });
+
                 return entity;
             },
             delete: async function (entity: Entity): Promise<Entity> {
@@ -172,11 +204,25 @@ export function createBoundedContext(contextName: string, transportLayer: Transp
         const formConstructor = createNamedFunction(
             entityName,
             function (this: EntityForm, id: string|number) {
-                metadata.set(this, { id, state: 'Updating', data: retrievalData.get(entityName)?.get(id) ?? {} });
+                metadata.set(this, { id, state: 'Updating', data: structuredClone(retrievalData.get(entityName)?.get(id) ?? {}) });
             }
         )
         entityNameMap.set(entityName, constructor);
         entityFormMap.set(entityName, formConstructor);
+        Object.defineProperty(constructor.prototype, 'id', {
+            enumerable: false,
+            configurable: true,
+            get: function (this: Entity): string|number|null {
+                return metadata.get(this)?.id ?? null;
+            }
+        });
+        Object.defineProperty(formConstructor.prototype, 'id', {
+            enumerable: false,
+            configurable: true,
+            get: function (this: EntityForm): string|number|null {
+                return metadata.get(this)?.id ?? null;
+            }
+        });
         constructor.prototype.createForm = function() {
             return new formConstructor(this.id);
         }
@@ -203,7 +249,8 @@ export function createBoundedContext(contextName: string, transportLayer: Transp
                         if (state && ['Draft', 'Creating'].includes(state.state)) {
                             return state.data ? state.data[propertyName] : undefined;
                         }
-                        return retrievalData.get(entityName)?.get(this.id)?.[propertyName];
+                        const id = state?.id;
+                        return id === null || id === undefined ? undefined : retrievalData.get(entityName)?.get(id)?.[propertyName];
                     } : function () {
                         throw new Error(propertyName + ' is not readable');
                     },
@@ -234,7 +281,6 @@ export function createBoundedContext(contextName: string, transportLayer: Transp
             {
                 enumerable: readable,
                 configurable: false,
-                writable: writableOnCreation||writableOnModification,
                 set: function (this: EntityForm, v: any): void {
                     const state = metadata.get(this);
                     if (!state) {

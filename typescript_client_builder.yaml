@@ -21,3 +21,6 @@ services:
       - '%apie.rest_api.base_url%'
     tags: ['controller.service_arguments']
 
+
+  Apie\TypescriptClientBuilder\Controllers\PlaygroundController:
+    tags: ['controller.service_arguments']

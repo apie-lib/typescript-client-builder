@@ -75,6 +75,22 @@ class TypescriptClientBuilderServiceProvider extends ServiceProvider
             )
         );
         $this->app->tag([\Apie\TypescriptClientBuilder\Controllers\Es6CodeController::class], 'controller.service_arguments');
+        $this->registerSingleton(
+            \Apie\TypescriptClientBuilder\Controllers\PlaygroundController::class,
+            function ($app) {
+                return new \Apie\TypescriptClientBuilder\Controllers\PlaygroundController(
+                
+                );
+            }
+        );
+        \Apie\ServiceProviderGenerator\TagMap::register(
+            $this->app,
+            \Apie\TypescriptClientBuilder\Controllers\PlaygroundController::class,
+            array(
+              0 => 'controller.service_arguments',
+            )
+        );
+        $this->app->tag([\Apie\TypescriptClientBuilder\Controllers\PlaygroundController::class], 'controller.service_arguments');
         
     }
 }

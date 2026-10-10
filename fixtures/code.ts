@@ -1,5 +1,5 @@
-import { createForApi } from "./contents/es6/index";
-import type { BoundedContext, Entity } from "./contents/es6/build-script";
+import { createForApi } from "./index";
+import type { BoundedContext, Entity } from "./build-script";
 type apieFixturesIdentifiersUserWithAddressIdentifier = string;
 type apieFixturesValueObjectsPassword = string;
 type apieFixturesIdentifiersUserWithAddressIdentifierResult = string;
@@ -261,4 +261,4 @@ interface ApieDefinitionBoundedContextHashmap {
     other: ApieDefinitionBoundedContextOther;
 }
 const ApieLayer: ApieDefinitionBoundedContextHashmap = createForApi(apiUrl, resourceDefinition);
-export { ApieLayer }
+export { ApieLayer, apiUrl, resourceDefinition }
