@@ -63,4 +63,3 @@ HTML;
         return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], $html);
     }
 }
-   
